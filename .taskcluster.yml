@@ -1,0 +1,130 @@
+version: 1
+policy:
+  pullRequests: collaborators
+tasks:
+  $let:
+
+    fetch_rev:
+      $if: 'tasks_for == "github-pull-request"'
+      then: ${event.pull_request.head.sha}
+      else:
+        $if: 'tasks_for == "github-push"'
+        then: ${event.after}
+        else: ${event.release.tag_name}
+
+    fetch_ref:
+      $if: 'tasks_for == "github-pull-request"'
+      then: "pull/${event.number}/head"
+      else:
+        $if: 'tasks_for == "github-push"'
+        then: ${event.ref}
+        else: "tags/${event.release.tag_name}"
+
+    head_branch:
+      $if: 'tasks_for == "github-pull-request"'
+      then: ${event.pull_request.head.ref}
+      else:
+        $if: 'tasks_for == "github-push"'
+        then:
+          # Strip ref branch prefix
+          $if: 'event.ref[0:11] == "refs/heads/"'
+          then: ${event.ref[11:]}
+          else: ${event.ref}
+        else: ${event.release.target_commitish}
+
+    http_repo:
+      $if: 'tasks_for == "github-pull-request"'
+      then: ${event.pull_request.base.repo.clone_url}
+      else: ${event.repository.clone_url}
+
+    taskboot_image: "mozilla/taskboot:0.2.2"
+  in:
+    $if: 'tasks_for in ["github-pull-request", "github-push"]'
+    then:
+      $flatten:
+        - $map:
+            - {image: ci-py-36, toxenv: 'py36', name: 'tests python 3.6'}
+            - {image: ci-py-37, toxenv: 'py37', name: 'tests python 3.7'}
+            - {image: ci-py-38, toxenv: 'py38', name: 'tests python 3.8'}
+            - {image: ci-py-39, toxenv: 'py39', name: 'tests python 3.9'}
+            - {image: ci-py-39, toxenv: 'lint', name: 'lint'}
+          each(build):
+            taskId: {$eval: as_slugid(build.toxenv)}
+            provisionerId: proj-fuzzing
+            workerType: ci
+            created: {$fromNow: ''}
+            deadline: {$fromNow: '1 hour'}
+            payload:
+              maxRunTime: 3600
+              image: mozillasecurity/${build.image}:latest
+              features:
+                taskclusterProxy: true
+              command:
+                - /bin/bash
+                - '--login'
+                - '-x'
+                - '-c'
+                - >-
+                  retry () { for _ in {1..9}; do "$@" && return || sleep 30; done; "$@"; }  &&
+                  git init repo &&
+                  cd repo &&
+                  git remote add origin ${http_repo} &&
+                  retry git fetch -q --depth=10 origin "${fetch_ref}" &&
+                  git -c advice.detachedHead=false checkout ${fetch_rev} &&
+                  tox -e ${build.toxenv}
+            metadata:
+              name: grizzly-reduce-tc ${build.name}
+              description: grizzly-reduce-tc ${build.name}
+              owner: '${event.sender.login}@users.noreply.github.com'
+              source: ${http_repo}/raw/${fetch_rev}/.taskcluster.yml
+        - - taskId: {$eval: as_slugid("docker_build")}
+            created: {$fromNow: ''}
+            deadline: {$fromNow: '1 hour'}
+            provisionerId: proj-fuzzing
+            workerType: ci
+            dependencies:
+              - {$eval: as_slugid("py36")}
+              - {$eval: as_slugid("py37")}
+              - {$eval: as_slugid("py38")}
+              - {$eval: as_slugid("py39")}
+              - {$eval: as_slugid("lint")}
+            payload:
+              features:
+                dind: true
+              maxRunTime: 3600
+              image: "${taskboot_image}"
+              env:
+                GIT_REPOSITORY: ${http_repo}
+                GIT_REVISION: ${fetch_rev}
+              command:
+                - taskboot
+                - build
+                - --build-tool
+                - dind
+                - --image
+                - mozillasecurity/grizzly-reduce-tc
+                - --tag
+                - "latest"
+                - --tag
+                - "${fetch_rev}"
+                - --write
+                - /image.tar
+                - Dockerfile
+              artifacts:
+                public/grizzly-reduce-tc-monitor.tar:
+                  expires: {$fromNow: '6 months'}
+                  path: /image.tar
+                  type: file
+            routes:
+              - "index.project.fuzzing.config.rev.${fetch_rev}"
+              - $if: 'tasks_for == "github-pull-request"'
+                then: "index.project.fuzzing.reduce-monitor.pull_request.${event.number}"
+                else: "index.project.fuzzing.reduce-monitor.${head_branch}"
+            scopes:
+              - docker-worker:capability:privileged
+              - queue:route:index.project.fuzzing.reduce-monitor.*
+            metadata:
+              name: Grizzly Reduction Monitor docker build
+              description: Build the docker image for grizzly-reduce-monitor tasks
+              owner: truber@mozilla.com
+              source: https://github.com/MozillaSecurity/grizzly-reduce-tc
