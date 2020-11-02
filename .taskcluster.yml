@@ -116,7 +116,7 @@ tasks:
                   path: /image.tar
                   type: file
             routes:
-              - "index.project.fuzzing.config.rev.${fetch_rev}"
+              - "index.project.fuzzing.reduce-monitor.rev.${fetch_rev}"
               - $if: 'tasks_for == "github-pull-request"'
                 then: "index.project.fuzzing.reduce-monitor.pull_request.${event.number}"
                 else: "index.project.fuzzing.reduce-monitor.${head_branch}"
