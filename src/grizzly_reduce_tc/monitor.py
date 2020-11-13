@@ -191,6 +191,8 @@ class ReductionMonitor(ReductionWorkflow):
                 },
                 "env": {
                     "CORPMAN": "reducer",
+                    "CREDSTASH_SECRET": "credstash-aws-auth",
+                    "FUZZING_CPU_COUNT": "0",  # force single instance/task
                     "IGNORE": "log-limit memory timeout",
                     "MEM_LIMIT": "7000",
                     "INPUT": str(crash_id),
