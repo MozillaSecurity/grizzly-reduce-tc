@@ -268,10 +268,10 @@ class ReductionMonitor(ReductionWorkflow):
             LOG.info("queuing %d for %s", reduction.crash, sig)
             if reduction.quality == FuzzManagerReporter.QUAL_UNREDUCED:
                 # perform first pass with generic platform reducer on Q5
-                dest_queue = GENERIC_PLATFORM
+                dest_queue = TC_QUEUES[GENERIC_PLATFORM]
             elif reduction.os in TC_QUEUES and reduction.os != GENERIC_PLATFORM:
                 # move Q6 to platform specific queue if it exists
-                dest_queue = reduction.os
+                dest_queue = TC_QUEUES[reduction.os]
             else:
                 LOG.info(
                     "> updating Q%d => Q%d, platform is %s",
