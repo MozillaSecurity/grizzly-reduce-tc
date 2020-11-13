@@ -190,12 +190,10 @@ class ReductionMonitor(ReductionWorkflow):
                     },
                 },
                 "env": {
-                    "BEARSPRAY": "1",
-                    "CACHE": "2",
                     "CORPMAN": "reducer",
                     "IGNORE": "log-limit memory timeout",
                     "MEM_LIMIT": "7000",
-                    "REDUCE_CRASH": str(crash_id),
+                    "INPUT": str(crash_id),
                     "TIMEOUT": "60",
                 },
                 "features": {"taskclusterProxy": True},

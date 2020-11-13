@@ -47,7 +47,7 @@ class ReductionUpdater(ReductionWorkflow):
         if args.from_task:
             LOG.info("Fetching crash ID from reduction task %s", args.from_task)
             task = Taskcluster.get_service("queue").task(args.from_task)
-            crash = int(task["payload"]["env"]["REDUCE_CRASH"])
+            crash = int(task["payload"]["env"]["INPUT"])
             return cls(crash, args.quality)
         return cls(args.crash, args.quality)
 
