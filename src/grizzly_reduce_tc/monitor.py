@@ -146,11 +146,11 @@ class ReductionMonitor(ReductionWorkflow):
             tool_list = Taskcluster.load_secrets(TOOL_LIST_SECRET)["tools"]
         self.tool_list = list(tool_list or [])
 
-    def queue_reduction_task(self, dest_queue, crash_id):
+    def queue_reduction_task(self, os_name, crash_id):
         """Queue a reduction task in Taskcluster.
 
         Arguments:
-            dest_queue (str): The Taskcluster queue to schedule tasks in.
+            os_name (str): The OS to schedule the task for.
             crash_id (int): The CrashManager crash ID to reduce.
 
         Returns:
@@ -158,6 +158,7 @@ class ReductionMonitor(ReductionWorkflow):
         """
         if self.dry_run:
             return
+        dest_queue = TC_QUEUES[os_name]
         my_task_id = os.environ.get("TASK_ID")
         task_id = slugId()
         now = datetime.utcnow()
@@ -170,7 +171,7 @@ class ReductionMonitor(ReductionWorkflow):
             "extra": {},
             "metadata": {
                 "description": DESCRIPTION,
-                "name": f"Reduce fuzzing crash {crash_id} for {dest_queue}",
+                "name": f"Reduce fuzzing crash {crash_id} for {os_name}",
                 "owner": OWNER_EMAIL,
                 "source": "https://github.com/MozillaSecurity/grizzly",
             },
@@ -268,10 +269,10 @@ class ReductionMonitor(ReductionWorkflow):
             LOG.info("queuing %d for %s", reduction.crash, sig)
             if reduction.quality == FuzzManagerReporter.QUAL_UNREDUCED:
                 # perform first pass with generic platform reducer on Q5
-                dest_queue = TC_QUEUES[GENERIC_PLATFORM]
+                os_name = GENERIC_PLATFORM
             elif reduction.os in TC_QUEUES and reduction.os != GENERIC_PLATFORM:
                 # move Q6 to platform specific queue if it exists
-                dest_queue = TC_QUEUES[reduction.os]
+                os_name = reduction.os
             else:
                 LOG.info(
                     "> updating Q%d => Q%d, platform is %s",
@@ -284,7 +285,7 @@ class ReductionMonitor(ReductionWorkflow):
                         reduction.crash, FuzzManagerReporter.QUAL_NOT_REPRODUCIBLE
                     )
                 continue
-            self.queue_reduction_task(dest_queue, reduction.crash)
+            self.queue_reduction_task(os_name, reduction.crash)
         LOG.info("finished polling FuzzManager")
         return 0
 
